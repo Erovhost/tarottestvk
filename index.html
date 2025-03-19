@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin: 20px 0;
+        }
+
+        .deck {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin: 20px 0;
+            position: relative;
+        }
+
+        .deck.cross {
+            display: grid;
+            grid-template-columns: repeat(3, 120px);
+            grid-template-rows: repeat(3, 200px);
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Позиционирование карт в кресте */
+        .deck.cross .card[data-position="center"] { 
+            grid-column: 2;
+            grid-row: 2;
+        }
+        .deck.cross .card[data-position="top"] { 
+            grid-column: 2;
+            grid-row: 1;
+        }
+        .deck.cross .card[data-position="bottom"] { 
+            grid-column: 2;
+            grid-row: 3;
+        }
+        .deck.cross .card[data-position="left"] { 
+            grid-column: 1;
+            grid-row: 2;
+        }
+        .deck.cross .card[data-position="right"] { 
+            grid-column: 3;
+            grid-row: 2;
+        }
+
+        .card {
+            width: 120px;
+            height: 200px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            transition: transform 0.6s;
+            transform-style: preserve-3d;
+        }
+
+        .card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            -webkit-backface-visibility: hidden;
+            backface-visibility: hidden;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 14px;
+            padding: 10px;
+            box-sizing: border-box;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+
+        .card-front {
+            background: linear-gradient(135deg, #2c3e50, #3498db);
+            border: 2px solid gold;
+            transform: rotateY(180deg);
+            color: white;
+        }
+
+        .card-back {
+            background: linear-gradient(45deg, #c31432, #240b36);
+            border: 2px solid gold;
+        }
+
+        .card-back::after {
+            content: "🌟";
+            font-size: 40px;
+        }
+
+        .position-label {
+            position: absolute;
+            bottom: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 12px;
+            white-space: nowrap;
+            color: #aaa;
+            text-align: center;
+            width: 100%;
+        }
+
+        button {
+            background: #4b6cb7;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: #182848;
+        }
+
+        select {
+            padding: 10px;
+            border-radius: 5px;
+            background: #4b6cb7;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        select:hover {
+            background: #182848;
+        }
+
+        .reading {
+            text-align: center;
+            margin: 20px;
+            max-width: 800px;
+            background: rgba(255,255,255,0.1);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .reading.visible {
+            display: block;
+        }
+
+        .spread-description {
+            margin: 20px;
+            padding: 15px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 10px;
+            max-width: 600px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>Расклад Таро</h1>
+    <div class="controls">
+        <select id="spreadType" onchange="updateSpreadDescription()">
+            <option value="1">Одна карта дня</option>
+            <option value="3">Прошлое-Настоящее-Будущее</option>
+            <option value="5">Крест (5 карт)</option>
+        </select>
+        <button onclick="shuffleCards()">Перемешать и разложить</button>
+    </div>
+    <div id="spreadDescription" class="spread-description"></div>
+    <div class="deck" id="deck"></div>
+    <div class="reading" id="reading"></div>
+
+    <script>
+        const tarotCards = [
+            "Шут", "Маг", "Верховная Жрица", "Императрица", "Император",
+            "Иерофант", "Влюбленные", "Колесница", "Сила", "Отшельник",
+            "Колесо Фортуны", "Справедливость", "Повешенный", "Смерть",
+            "Умеренность", "Дьявол", "Башня", "Звезда", "Луна", "Солнце",
+            "Суд", "Мир"
+        ];
+
+        const meanings = {
+            "Шут": "Новые начинания, спонтанность, свобода",
+            "Маг": "Сила воли, мастерство, уверенность",
+            "Верховная Жрица": "Интуиция, тайны, духовность",
+            "Императрица": "Изобилие, творчество, материнство",
+            "Император": "Власть, структура, стабильность",
+            "Иерофант": "Традиции, обучение, духовное руководство",
+            "Влюбленные": "Выбор, любовь, гармония",
+            "Колесница": "Движение вперед, победа, самоконтроль",
+            "Сила": "Внутренняя сила, храбрость, терпение",
+            "Отшельник": "Самопознание, мудрость, уединение",
+            "Колесо Фортуны": "Судьба, циклы, поворотные моменты",
+            "Справедливость": "Баланс, честность, причина и следствие",
+            "Повешенный": "Жертвенность, новый взгляд, ожидание",
+            "Смерть": "Трансформация, конец, новое начало",
+            "Умеренность": "Баланс, исцеление, гармония",
+            "Дьявол": "Материализм, зависимость, теневая сторона",
+            "Башня": "Внезапные изменения, разрушение старого",
+            "Звезда": "Надежда, вдохновение, обновление",
+            "Луна": "Интуиция, иллюзии, подсознание",
+            "Солнце": "Радость, успех, жизненная сила",
+            "Суд": "Возрождение, внутренний зов, прощение",
+            "Мир": "Завершение, интеграция, достижение"
+        };
+
+        const spreadDescriptions = {
+            "1": "Карта дня даст подсказку или совет на сегодняшний день",
+            "3": "Расклад на три позиции: прошлое, настоящее и будущее ситуации",
+            "5": "Крестовый расклад: центр - суть вопроса, верх - то, что помогает, низ - основание ситуации, слева - прошлое, справа - будущее"
+        };
+
+        const crossPositions = {
+            0: { position: "center", label: "Суть вопроса" },
+            1: { position: "top", label: "Что помогает" },
+            2: { position: "bottom", label: "Основание" },
+            3: { position: "left", label: "Прошлое" },
+            4: { position: "right", label: "Будущее" }
+        };
+
+        let selectedCards = [];
+
+        function updateSpreadDescription() {
+            const spreadType = document.getElementById('spreadType').value;
+            const description = document.getElementById('spreadDescription');
+            description.textContent = spreadDescriptions[spreadType];
+            createDeck();
+        }
+
+        function createDeck() {
+            const deck = document.getElementById('deck');
+            const spreadType = document.getElementById('spreadType').value;
+            deck.innerHTML = '';
+            
+            deck.className = 'deck ' + (spreadType === "5" ? 'cross' : 'regular');
+            
+            const cardCount = parseInt(spreadType);
+            
+            for (let i = 0; i < cardCount; i++) {
+                const card = document.createElement('div');
+                card.className = 'card';
+                
+                if (spreadType === "5") {
+                    card.setAttribute('data-position', crossPositions[i].position);
+                    const label = document.createElement('div');
+                    label.className = 'position-label';
+                    label.textContent = crossPositions[i].label;
+                    card.appendChild(label);
+                }
+                
+                card.innerHTML += `
+                    <div class="card-inner">
+                        <div class="card-back"></div>
+                        <div class="card-front"></div>
+                    </div>
+                `;
+                card.addEventListener('click', () => flipCard(card, i));
+                deck.appendChild(card);
+            }
+        }
+
+        function shuffleCards() {
+            const spreadType = document.getElementById('spreadType').value;
+            selectedCards = [];
+            const shuffled = [...tarotCards].sort(() => Math.random() - 0.5);
+            selectedCards = shuffled.slice(0, parseInt(spreadType));
+            document.getElementById('reading').innerHTML = '';
+            document.getElementById('reading').classList.remove('visible');
+            createDeck();
+        }
+
+        function flipCard(card, index) {
+            if (!card.classList.contains('flipped') && selectedCards[index]) {
+                card.classList.add('flipped');
+                const frontElement = card.querySelector('.card-front');
+                frontElement.textContent = selectedCards[index];
+                
+                const spreadType = document.getElementById('spreadType').value;
+                const allFlipped = document.querySelectorAll('.flipped').length;
+                if (allFlipped === parseInt(spreadType)) {
+                    showReading();
+                }
+            }
+        }
+
+        function showReading() {
+            const reading = document.getElementById('reading');
+            const spreadType = document.getElementById('spreadType').value;
+            
+            let content = '<h2>Значение карт:</h2>';
+            
+            if (spreadType === "1") {
+                content += `
+                    <p><strong>Карта дня:</strong> ${selectedCards[0]}<br>
+                    <em>${meanings[selectedCards[0]]}</em></p>
+                `;
+            } else if (spreadType === "3") {
+                content += `
+                    <p><strong>Прошлое:</strong> ${selectedCards[0]}<br>
+                    <em>${meanings[selectedCards[0]]}</em></p>
+                    <p><strong>Настоящее:</strong> ${selectedCards[1]}<br>
+                    <em>${meanings[selectedCards[1]]}</em></p>
+                    <p><strong>Будущее:</strong> ${selectedCards[2]}<br>
+                    <em>${meanings[selectedCards[2]]}</em></p>
+                `;
+            } else if (spreadType === "5") {
+                content += `
+                    <p><strong>Суть вопроса:</strong> ${selectedCards[0]}<br>
+                    <em>${meanings[selectedCards[0]]}</em></p>
+                    <p><strong>Что помогает:</strong> ${selectedCards[1]}<br>
+                    <em>${meanings[selectedCards[1]]}</em></p>
+                    <p><strong>Основание:</strong> ${selectedCards[2]}<br>
+                    <em>${meanings[selectedCards[2]]}</em></p>
+                    <p><strong>Прошлое:</strong> ${selectedCards[3]}<br>
+                    <em>${meanings[selectedCards[3]]}</em></p>
+                    <p><strong>Будущее:</strong> ${selectedCards[4]}<br>
+                    <em>${meanings[selectedCards[4]]}</em></p>
+                `;
+            }
+            
+            reading.innerHTML = content;
+            reading.classList.add('visible');
+        }
+
+        // Инициализация
+        updateSpreadDescription();
+        createDeck();
+    </script>
+</body>
+</html>
+
